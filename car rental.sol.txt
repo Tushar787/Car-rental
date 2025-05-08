@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+contract CarRental {
+    address public owner;
+
+    struct Car {
+        uint id;
+        string model;
+        uint pricePerDay; // in wei
+        bool isAvailable;
+    }
+
+    struct Rental {
+        uint carId;
+        address renter;
+        uint startTime;
+        uint rentalDurationDays;
+    }
+
+    uint public carCount = 0;
+    mapping(uint => Car) public cars;
+    mapping(address => Rental) public rentals;
+
+    event CarAdded(uint carId, string model, uint pricePerDay);
+    event CarRented(uint carId, address renter, uint durationDays, uint totalPrice);
+    event CarReturned(uint carId, address renter);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function addCar(string memory _model, uint _pricePerDay) public onlyOwner {
+        cars[carCount] = Car(carCount, _model, _pricePerDay, true);
+        emit CarAdded(carCount, _model, _pricePerDay);
+        carCount++;
+    }
+
+    function rentCar(uint _carId, uint _days) public payable {
+        Car storage car = cars[_carId];
+        require(car.isAvailable, "Car not available");
+        uint totalPrice = car.pricePerDay * _days;
+        require(msg.value >= totalPrice, "Insufficient payment");
+
+        car.isAvailable = false;
+        rentals[msg.sender] = Rental(_carId, msg.sender, block.timestamp, _days);
+
+        emit CarRented(_carId, msg.sender, _days, totalPrice);
+    }
+
+    function returnCar() public {
+        Rental memory rental = rentals[msg.sender];
+        require(rental.renter == msg.sender, "You did not rent a car");
+
+        Car storage car = cars[rental.carId];
+        car.isAvailable = true;
+
+        emit CarReturned(rental.carId, msg.sender);
+        delete rentals[msg.sender];
+    }
+
+    function withdrawFunds() public onlyOwner {
+        payable(owner).transfer(address(this).balance);
+    }
+}
